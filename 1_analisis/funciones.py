@@ -292,3 +292,5 @@ def fig_churn_plot(tipo_productos, tipo_altas, tipo_bajas):
   ))
 
   return fig
+
+
