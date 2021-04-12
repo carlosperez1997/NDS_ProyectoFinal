@@ -310,25 +310,12 @@ app.layout = html.Div(className="main_container",
 )
 def update_output(producto):
      
-    # Ingresos, clientes activos y nuevos clientes
+    # Ingresos, nuevos clientes y clientes activos 
     ingresos = str( int(altas_df.loc[last_partition][producto]) )
-    clientes_activos = str( int(ingresos_df.loc[last_partition][producto]) )
+    nuevos_clientes = str( most_recent_buyers.groupby(producto)['pk_cid'].count()[0] )
+    
+    clientes_activos = str( 1000 )
     print( ingresos_df.loc[last_partition][producto] )
-    nuevos_clientes = str( most_recent_buyers.groupby(producto)['pk_cid'].count() )
-
-    #ingresos_tabla = ingresos_df.sum(axis=1).reset_index()
-    #ingresos_tabla.columns = ['pk_partition', 'ingresos']
-    #ingresos_tabla = ingresos_tabla[1:]
-
-    #ingresos_tabla['ingresos_old'] = ingresos_tabla['ingresos'].shift(1)
-
-    #ingresos_tabla['rate'] = (ingresos_tabla['ingresos'] - ingresos_tabla['ingresos_old'])/ingresos_tabla['ingresos_old']*100
-    #ingresos_tabla
-
-    #fig = px.area(ingresos_tabla, x="pk_partition", y="rate")
-
-    #fig.update_layout(title= 'Evolución del crecimiento mensual (Ingresos)',
-    #                yaxis_title='Crecimiento mensual')
 
     # Altas y bajas de productos
     fig_altas_bajas, altas_, bajas_ = fp.altas_bajas_producto(altas_df[1:], bajas_df[1:], producto)
@@ -371,7 +358,7 @@ def update_output(producto):
     #Salarios, Edades y Paises
     fig_salarios, fig_edades, fig_spain, fig_abroad, fig_canal = fp.fig_salarios_edades_paises( products_dict, producto, dir_path, spanish_regions_code, paises_code)
 
-    return ingresos, clientes_activos, nuevos_clientes, fig_altas_bajas, fig_ingresos, churn_text, fig_churn, perm_text, fig_permanencias, antig_text, fig_antiguedades, fig_canal, fig_spain, fig_abroad, fig_salarios, fig_edades, data, columns
+    return ingresos, nuevos_clientes, clientes_activos, fig_altas_bajas, fig_ingresos, churn_text, fig_churn, perm_text, fig_permanencias, antig_text, fig_antiguedades, fig_canal, fig_spain, fig_abroad, fig_salarios, fig_edades, data, columns
 
 
 if __name__ == '__main__':
