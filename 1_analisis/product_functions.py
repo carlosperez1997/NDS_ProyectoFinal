@@ -13,10 +13,11 @@ import plotly.graph_objects as go
 pd.options.display.float_format = '{:,.2f}'.format
 
 def altas_bajas_producto (altas, bajas, producto):
-  altas_ = altas[producto].reset_index()
-  bajas_ = bajas[producto].reset_index()
+  altas_ = altas[['pk_partition',producto]]
+  bajas_ = bajas[['pk_partition',producto]]
 
   fig = go.Figure()
+ 
   fig.add_trace(go.Scatter(x=altas_["pk_partition"], y=altas_[producto], name='Altas'))
   fig.add_trace(go.Scatter(x=bajas_["pk_partition"], y=bajas_[producto], name='Bajas'))
 
@@ -35,35 +36,6 @@ def altas_bajas_producto (altas, bajas, producto):
   return fig, altas_, bajas_
 
 
-def obtener_permanencia (products_sorted, prod, first_partition, last_partition):
-    prev = 'prev'
-    diff = 'diff'
-    prev_date = 'prev_date'
-
-    prod_df = products_sorted[['pk_cid','pk_partition',prod]]
-
-    prod_df[prev] = prod_df.groupby('pk_cid')[prod].shift(1) # columna con valor del mes anterior 
-    prod_df.loc[:,diff] = prod_df[prod] - prod_df[prev] # +1: alta, 0: no cambio, -1: baja
-
-    prod_df.fillna(0, inplace=True)
-
-    # Consideramos el primer mes como origen
-    prod_df[diff] = np.where( (prod_df[diff] == 0) & (prod_df[prod] == 1) & (prod_df['pk_partition'] == first_partition), 1, prod_df[diff] )
-    # prod_df[diff] = np.where( (prod_df[diff] == 0) & (prod_df[prod] == 1) & (prod_df['pk_partition'] == last_partition), -1, prod_df[diff] )
-
-    prod_df = prod_df[ (prod_df[diff] != 0) ]
-
-    prod_df.loc[:,prev_date] = prod_df.groupby('pk_cid')['pk_partition'].shift(1)
-
-    prod_df = prod_df[ prod_df[diff] == -1 ]
-
-    prod_df['perm'] = round((prod_df['pk_partition'] - prod_df[prev_date])/np.timedelta64(1, 'M')) # diferencia en meses
-
-    permanencia = vc_to_dict(prod_df, 'perm', 16) # pasamos el resultado a diccionario
-
-    return permanencia
-
-
 def vc_to_dict(prod_df, col, imax):
     dicc = {}
     result = prod_df[col].value_counts().sort_index()
@@ -80,11 +52,16 @@ def vc_to_dict(prod_df, col, imax):
 def dicc_mean(dicc):
   accu = 0
   count = 0
-  for x in dicc:
-    accu += x*dicc[x]
-    count += dicc[x]
+  for key, val in dicc.items():
+    accu += (key+1)*val
+    count += val
+
+  if count == 0:
+    result = 0
+  else:
+    result = accu/count
   
-  return accu/count
+  return result
 
 
 def cambiar_duraciones(vector, duraciones):
@@ -101,8 +78,8 @@ def cambiar_duraciones(vector, duraciones):
   return new_vector
 
 
-def permanencias(products_sorted, prod, first_partition, last_partition):
-    perm = obtener_permanencia (products_sorted, prod, first_partition, last_partition)
+def permanencias(permanencias, prod):
+    perm = permanencias[prod]
 
     mean = dicc_mean(perm)
     perm_text = 'Permanencia media: '+str( round(mean*10)/10 )+' meses'
@@ -122,34 +99,8 @@ def permanencias(products_sorted, prod, first_partition, last_partition):
     return fig, perm_text
 
 
-def obtener_antiguedad (products_sorted, prod, first_partition, last_partition):
-    prev = 'prev'
-    diff = 'diff'
-    prev_date = 'prev_date'
-
-    prod_df = products_sorted[['pk_cid','pk_partition',prod]]
-
-    prod_df[prev] = prod_df.groupby('pk_cid')[prod].shift(1)
-    prod_df.loc[:,diff] = prod_df[prod] - prod_df[prev]
-
-    prod_df.fillna(0, inplace=True)
-
-    prod_df[diff] = np.where( (prod_df[diff] == 0) & (prod_df[prod] == 1) & (prod_df['pk_partition'] == first_partition), 1, prod_df[diff] )
-    prod_df[diff] = np.where( (prod_df[diff] == 0) & (prod_df[prod] == 1) & (prod_df['pk_partition'] == last_partition), -1, prod_df[diff] )
-
-    prod_df = prod_df[ (prod_df[diff] == -1) | (prod_df[diff] == 1) ]
-    prod_df.loc[:,prev_date] = prod_df.groupby('pk_cid')['pk_partition'].shift(1)
-
-    prod_df = prod_df[ (prod_df['pk_partition'] == last_partition) ]
-    prod_df['perm'] = round((prod_df['pk_partition'] - prod_df[prev_date])/np.timedelta64(1, 'M'))
-
-    antiguedad = vc_to_dict(prod_df, 'perm', 16)
-
-    return antiguedad
-
-
-def antiguedad(products_sorted, prod, first_partition, last_partition):
-    antig = obtener_antiguedad (products_sorted, prod, first_partition, last_partition)
+def antiguedad(antiguedades_df, prod):
+    antig = antiguedades_df[prod]
 
     mean = dicc_mean(antig)
     antig_text = 'Antigüedad media: '+str( round(mean*10)/10 )+' meses'
@@ -170,7 +121,7 @@ def antiguedad(products_sorted, prod, first_partition, last_partition):
 
 
 def obtener_churn (tipo_productos, tipo_altas, tipo_bajas, prod):
-    churn_local = tipo_productos[[prod]]
+    churn_local = tipo_productos[['pk_partition',prod]]
     churn_local['old'] = churn_local[prod].shift(1)
 
     churn_local['altas'] = tipo_altas[[prod]]
@@ -180,45 +131,43 @@ def obtener_churn (tipo_productos, tipo_altas, tipo_bajas, prod):
 
     churn_local = churn_local.reset_index()
     
-    churn_text = str( round(churn_local['churn_rate'].mean()*100)/100 ) + '%'
+    churn_local['churn_rate'].fillna(0, inplace=True) 
+
+    churn_text = str( round(churn_local['churn_rate'][1:].mean()*100)/100 ) + '%'
 
     fig = px.line(churn_local, x='pk_partition', y='churn_rate')
     
     return fig, churn_text
 
 
-def two_combination(product, products_df):
-  boolean_cols = ["short_term_deposit", "loans", "mortgage", "funds", "securities", "long_term_deposit", "em_account_pp", "credit_card", "payroll_account", "emc_account", "debit_card", "em_account_p", "em_acount", "payroll", "pension_plan"]
-  x = boolean_cols.index(product)
-  vector = np.arange(len(boolean_cols))
-  comb_2 = []
+def combinations_table(combinaciones_df, producto):
+  comb = combinaciones_df[ combinaciones_df['producto_1'] == producto ]
+  comb.columns = ['Producto ref.','Producto comp.', 'Clientes Ambos', 'Clientes Ref.', 'Clientes Comp.', 'Proporcion' ]
 
-  for y in vector[vector > x]:
-    comb_2.append([x,y])
+  return comb
+  
 
-  two_pack = pd.DataFrame(columns=['producto_1','producto_2','total','total_1','total_2'])
-  for x, y in comb_2:
-      col_x = boolean_cols[x]
-      col_y = boolean_cols[y]
-      df_x = products_df.loc[ (products_df[ col_x ] == True) ]
-      df_y = products_df.loc[ (products_df[ col_y ] == True) ]
-      df = products_df.loc[ (products_df[ col_x ] == True) & (products_df[ col_y ] == True) ]
-      if df.shape[0] != 0:
-        # pd.concat([pd.DataFrame([i], columns=['A']) for i in range(5)],
-        #   ignore_index=True)
-          df_ = pd.DataFrame( {'producto_1':col_x, 'producto_2':col_y, 'total':df.shape[0], 'total_1': df_x.shape[0] ,'total_2': df_y.shape[0] }, index=[0] )
-          two_pack = pd.concat( [two_pack, df_], ignore_index=True) 
+def fig_spain( df, producto ):
+  data = df [ df['producto'] == producto ]
+  fig = px.bar(data, x='ciudad', y='ciudad_num')
 
-  two_pack['prop'] = two_pack['total'] / two_pack['total_1'] * 100 
-  #two_pack['prop_2'] = two_pack['total'] / two_pack['total_2'] * 100
-  two_pack.sort_values('prop', ascending=False, inplace=True)
+  return fig
 
-  two_pack['prop'] = two_pack[['prop']].astype('float')
-  two_pack['prop'] = two_pack[['prop']].round(2)
 
-  two_pack.columns = ['Producto ref.','Producto comp.', 'Clientes Ambos', 'Clientes Ref.', 'Clientes Comp.', 'Proporcion' ]
+def fig_abroad( df, producto):
+  data = df [ df['producto'] == producto ]
+  data = data[ data['pais_num'] != 0]
+  fig = px.bar(data, x='pais', y='pais_num')
 
-  return two_pack
+  return fig
+
+
+def fig_canal( df, producto ):
+  data = df [ df['producto'] == producto ]
+  data = data[ data['entry_channel_num'] != 0]
+  fig = px.bar(data, x='entry_channel', y='entry_channel_num')
+
+  return fig
 
 
 def fig_salarios_edades_paises( products_dict, prod, dir_path, spanish_regions_code, paises_code):

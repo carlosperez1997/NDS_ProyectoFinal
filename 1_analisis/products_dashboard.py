@@ -16,13 +16,34 @@ import seaborn as sns
 import folium
 import plotly.express as px
 import plotly.graph_objects as go
-
-pd.options.display.float_format = '{:,.2f}'.format
+import base64
 
 from dash.dependencies import Input, Output, State
 
+# Funciones propias
 import funciones as f
 import product_functions as fp
+
+import pymysql
+from sqlalchemy import create_engine
+import sqlalchemy
+
+pd.options.display.float_format = '{:,.2f}'.format
+
+# Nos conectamos a la base de datos en AWS RDS
+
+host = 'easymoney-db.ct1jtd8962g9.us-east-2.rds.amazonaws.com'
+user = 'admin'
+password = 'carlos1234'
+database = 'easymoney-db'
+
+db = pymysql.connect(host = host, user = user, password = password)
+cursor = db.cursor()
+
+cursor.connection.commit()
+
+sSQL = '''USE easymoney'''
+cursor.execute(sSQL)
 
 dir_path = '/Users/carlosperezricardo/Documents/data/'
 
@@ -103,7 +124,17 @@ products_dict = {"short_term_deposit":"ahorro e inversión", "loans":"financiaci
 cost_product = {'cuenta':10, 'ahorro e inversión':40, 'financiación':60}
 
 # Altas y bajas de todos los productos
-altas_df, bajas_df, productos_exist_df = f.read_data()
+
+altas_df = f.read_data( cursor, dir_path, "altas" ); db.commit()
+bajas_df = f.read_data( cursor, dir_path, "bajas" ); db.commit()
+productos_exist_df = f.read_data( cursor, dir_path, "productos_existentes" ); db.commit()
+clientes_primerizos_df = f.read_data(cursor, dir_path, "clientes_primerizos" ); db.commit()
+usuarios_activos_df = f.read_data(cursor, dir_path, "usuarios_activos" ); db.commit()
+
+permanencias_df = f.read_data( cursor, dir_path, "permanencias" ); db.commit()
+antiguedades_df = f.read_data( cursor, dir_path, "antiguedades" ); db.commit()
+combinaciones_df = f.read_data( cursor, dir_path, "combinaciones" ); db.commit()
+informacion_productos_df = f.read_data( cursor, dir_path, "informacion_productos"); db.commit()
 
 # Ingresos de cada tipo
 ingresos_df, ahorros_df, financiacion_df, cuentas_df = f.obtencion_ingresos(altas_df, products_dict, cost_product)
@@ -116,20 +147,14 @@ bajas_ahorros, bajas_financiacion, bajas_cuentas = f.tipos_producto(bajas_df, pr
 first_partition = '2018-01-28'
 last_partition = '2019-05-28'
 
-products = pd.read_csv(dir_path+'products_df.csv', encoding='utf-8')
-products.drop(columns=['Unnamed: 0'], inplace=True)
-products_sorted = products.sort_values(by=['pk_cid', 'pk_partition'])
-products_sorted['pk_partition'] = pd.to_datetime(products_sorted['pk_partition'])
+##
+#products = pd.read_csv(dir_path+'products_df.csv', encoding='utf-8')
+#products.drop(columns=['Unnamed: 0'], inplace=True)
+#products_sorted = products.sort_values(by=['pk_cid', 'pk_partition'])
+#products_sorted['pk_partition'] = pd.to_datetime(products_sorted['pk_partition'])
 
-first_buyers = pd.read_csv(dir_path+'first_buyers.csv')
-most_recent_buyers = first_buyers[ first_buyers['pk_partition'] == last_partition ]
-
-
-
-
-#[ ahorros_df['pk_partition'] == last_partition ]['loans']
-
-
+#first_buyers = pd.read_csv(dir_path+'first_buyers.csv')
+#most_recent_buyers = first_buyers[ first_buyers['pk_partition'] == last_partition ]
 
 
 
@@ -162,7 +187,7 @@ app.layout = html.Div(className="main_container",
             html.P('Seleccione el producto: ', style={'width': '30%', 'display': 'inline-block', 'text-align': 'right'}),
             dcc.Dropdown(id='dropdown_tipo_select',
             options= dropdown_opts, 
-            value='loans', style={'width': '70%', 'display': 'inline-block'})
+            value='mortgage', style={'width': '70%', 'display': 'inline-block'})
         ])
     ),
     html.Div(
@@ -177,10 +202,10 @@ app.layout = html.Div(className="main_container",
                             html.P( id='ingresos')
                     ]),
                     html.Div( className='flecha', children=[
-                        html.P('▲') # U+25B2
+                        html.P( id='flecha_ingresos') 
                     ]),
                     html.Div( className='crecimiento', children=[
-                            html.P('3%')  
+                            html.P( id='ingresos_rate' )  
                     ]),
             ]),
             # Nuevos Clientes
@@ -193,26 +218,26 @@ app.layout = html.Div(className="main_container",
                             html.P( id='nuevos_clientes' )
                     ]),
                     html.Div( className='flecha', children=[
-                        html.P('▲') # U+25B2
+                        html.P( id='flecha_nuevos' ) 
                     ]),
                     html.Div( className='crecimiento', children=[
-                            html.P('3%')  
+                            html.P( id='nuevos_rate' )  
                     ]),
             ]),
             # Clientes Activos
             html.Li( className='summary_window',
                 children = [
                     html.Div( className='text', children=[
-                    html.H4('Clientes Activos:')
+                    html.H4('Usuarios Activos:')
                     ]),
                     html.Div( className='value', children=[
                             html.P( id='clientes_activos' )
                     ]),
                     html.Div( className='flecha', children=[
-                        html.P('▲') # U+25B2
+                        html.P( id='flecha_activos' ) 
                     ]),
                     html.Div( className='crecimiento', children=[
-                            html.P('3%')  
+                            html.P( id='activos_rate' )  
                     ]),
             ]),
         ]),
@@ -261,15 +286,21 @@ app.layout = html.Div(className="main_container",
             dcc.Graph( id='fig_abroad' )
         ], style={'width': '33%', 'display': 'inline-block'}
     ),
+
     html.Div( 
-        children=[ html.H3('Edades'),
-            dcc.Graph( id='fig_edades' )
-        ], style={'width': '50%', 'display': 'inline-block'}
-    ),
-    html.Div( 
-        children=[ html.H3('Salarios'),
-            dcc.Graph( id='fig_salarios' )
-        ], style={'width': '50%', 'display': 'inline-block'}
+        children=[
+        html.Div( 
+            children=[ html.H3('Edades'),
+                html.Div( id='fig_edades' )
+            ], style={'width': '50%', 'display': 'inline-block'}
+        ),
+        html.Div( 
+            children=[ html.H3('Salarios'),
+                html.Div( id='fig_salarios' )
+            ], style={'width': '50%', 'display': 'inline-block'}
+        ),
+        html.P('* Las imágenes de Edades y Salarios están en estático para mejorar el tiempo de actualización de los datos, por lo que el hover no funciona.')
+        ]
     ),
     html.Div( id='two_pack',
         children=[ html.H3('Combinaciones de 2 productos'),
@@ -288,13 +319,24 @@ app.layout = html.Div(className="main_container",
 
 
 @app.callback(
+    # Ingresos
     Output('ingresos', 'children'),
+    Output('flecha_ingresos', 'children'),
+    Output('rate_ingresos', 'children'),
+    # Nuevos Clientes
     Output('nuevos_clientes', 'children'),
+    Output('flecha_nuevos', 'children'),
+    Output('rate_nuevos', 'children'),
+    # Usuarios Activos
     Output('clientes_activos', 'children'),
+    Output('flecha_activos', 'children'),
+    Output('rate_activos', 'children'),
+    # Altas-bajas, Ingresos y churn
     Output('fig_altas_bajas', 'figure'),
     Output('fig_ingresos', 'figure'),
     Output('mean_churn', 'children'),
     Output('fig_churn', 'figure'),
+    # Permanencia y antiguedades
     Output('mean_perm', 'children'),
     Output('fig_permanencias', 'figure'),
     Output('mean_antig', 'children'),
@@ -302,8 +344,8 @@ app.layout = html.Div(className="main_container",
     Output('fig_canal', 'figure'),
     Output('fig_spain', 'figure'),
     Output('fig_abroad', 'figure'),
-    Output('fig_salarios', 'figure'),
-    Output('fig_edades', 'figure'),
+    Output('fig_salarios', 'children'),
+    Output('fig_edades', 'children'),
     Output("twopack_table", "data"),
     Output("twopack_table", "columns"),
     Input('dropdown_tipo_select', 'value')
@@ -311,15 +353,26 @@ app.layout = html.Div(className="main_container",
 def update_output(producto):
      
     # Ingresos, nuevos clientes y clientes activos 
-    ingresos = str( int(altas_df.loc[last_partition][producto]) )
-    nuevos_clientes = str( most_recent_buyers.groupby(producto)['pk_cid'].count()[0] )
-    
-    clientes_activos = str( 1000 )
-    print( ingresos_df.loc[last_partition][producto] )
+    ingresos = int(ingresos_df[ ingresos_df['pk_partition'] == last_partition] [producto])
+    nuevos_clientes = int(clientes_primerizos_df[ clientes_primerizos_df['pk_partition'] == last_partition] [producto])
+    clientes_activos = int(usuarios_activos_df[ usuarios_activos_df['pk_partition'] == last_partition] [producto])
+  
+    # Rates y Flechas
+    ingresos_rate = f.calcular_rate(ingresos_df[['pk_partition',producto]].set_index('pk_partition'))
+    nuevos_clientes_rate = f.calcular_rate(clientes_primerizos_df[['pk_partition',producto]].set_index('pk_partition'))
+    clientes_activos_rate = f.calcular_rate(usuarios_activos_df[['pk_partition',producto]].set_index('pk_partition'))
 
+    last_ingresos_rate = ingresos_rate.iloc[-1]['rate']
+    last_nuevos_rate = nuevos_clientes_rate.iloc[-1]['rate']
+    last_activos_rate = clientes_activos_rate.iloc[-1]['rate']
+
+    last_ingresos_rate, flecha_ingresos = f.limpiar_y_flecha( last_ingresos_rate )
+    last_nuevos_rate, flecha_nuevos = f.limpiar_y_flecha( last_nuevos_rate )
+    last_activos_rate, flecha_activos = f.limpiar_y_flecha( last_activos_rate )
+    
     # Altas y bajas de productos
     fig_altas_bajas, altas_, bajas_ = fp.altas_bajas_producto(altas_df[1:], bajas_df[1:], producto)
-   
+    
     # Ingresos
     tipo_producto = products_dict[producto]
 
@@ -346,19 +399,32 @@ def update_output(producto):
     fig_churn, churn_text = fp.obtener_churn (tipo_productos, tipo_altas, tipo_bajas, producto)
 
     # Permanencias
-    fig_permanencias, perm_text = fp.permanencias(products_sorted, producto, first_partition, last_partition)
+    fig_permanencias, perm_text = fp.permanencias(permanencias_df, producto)
 
-    # Permanencias
-    fig_antiguedades, antig_text = fp.antiguedad(products_sorted, producto, first_partition, last_partition)
+    # Antiguedades
+    fig_antiguedades, antig_text = fp.antiguedad(antiguedades_df, producto)
 
-    two_pack = fp.two_combination(producto, products)
+    two_pack = fp.combinations_table(combinaciones_df, producto)
     data = two_pack.to_dict('records')
     columns = [{"name": i, "id": i} for i in two_pack.columns]
 
-    #Salarios, Edades y Paises
-    fig_salarios, fig_edades, fig_spain, fig_abroad, fig_canal = fp.fig_salarios_edades_paises( products_dict, producto, dir_path, spanish_regions_code, paises_code)
+    fig_canal = fp.fig_canal( informacion_productos_df, producto )
+    fig_spain = fp.fig_spain( informacion_productos_df, producto )
+    fig_abroad = fp.fig_abroad( informacion_productos_df, producto )
 
-    return ingresos, nuevos_clientes, clientes_activos, fig_altas_bajas, fig_ingresos, churn_text, fig_churn, perm_text, fig_permanencias, antig_text, fig_antiguedades, fig_canal, fig_spain, fig_abroad, fig_salarios, fig_edades, data, columns
+    #image_filename = 'assets/ahorros_edades.png' # replace with your own image
+    #fig_salarios = base64.b64encode(open(image_filename, 'rb').read())
+
+    fig_salarios = html.Img(src=app.get_asset_url( tipo_producto +'_salarios.png')) 
+    fig_edades = html.Img(src=app.get_asset_url( tipo_producto +'_edades.png'))
+    
+    #Salarios, Edades y Paises
+    #fig_salarios = fig_salarios(producto)
+    #fig_salarios, fig_edades, fig_spain, fig_abroad, fig_canal = fp.fig_salarios_edades_paises( products_dict, producto, dir_path, spanish_regions_code, paises_code)
+
+    return ingresos, flecha_ingresos, last_ingresos_rate, nuevos_clientes, flecha_nuevos, last_nuevos_rate, clientes_activos, flecha_activos, last_activos_rate, \
+        fig_altas_bajas, fig_ingresos, churn_text, fig_churn, perm_text, fig_permanencias, \
+            antig_text, fig_antiguedades, fig_canal, fig_spain, fig_abroad, fig_salarios, fig_edades, data, columns 
 
 
 if __name__ == '__main__':

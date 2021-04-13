@@ -6,17 +6,59 @@ import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
 
+# AWS RDS - MySQL Database
+import pymysql
+from sqlalchemy import create_engine
+import sqlalchemy
+
 pd.options.display.float_format = '{:,.2f}'.format
 
+def read_data( cursor, dir_path, tabla ):
+  try:
+    df = read_from_sql(cursor,tabla)
+    #print(tabla,' importada de SQL')
+  except:
+    print(tabla,' no importada de SQL')
+    df = pd.read_csv(dir_path+tabla+'.csv')
+    if 'Unnamed: 0' in df.columns:
+      df.drop('Unnamed: 0', axis=1, inplace=True)
 
-def read_data(a = None):
-  dir_path = '/Users/carlosperezricardo/Documents/data/'
+  return df
 
-  altas_df = pd.read_csv(dir_path+'altas.csv', encoding='utf-8', index_col=0)
-  bajas_df = pd.read_csv(dir_path+'bajas.csv', encoding='utf-8', index_col=0)
-  productos_exist_df = pd.read_csv(dir_path+'products_exist.csv', encoding='utf-8', index_col=0)
 
-  return altas_df, bajas_df, productos_exist_df
+def read_from_sql( cursor, tabla ):
+  if tabla in ['altas','bajas','productos_existentes','permanencias','antiguedades']:
+    list_df = ['pk_partition','short_term_deposit','loans','mortgage','funds','securities',
+    'long_term_deposit','em_account_pp','credit_card','payroll_account','emc_account','debit_card',
+    'em_account_p','em_acount']
+  
+  if tabla == 'combinaciones':
+    list_df = ['producto_1', 'producto_2', 'total', 'total_1', 'total_2', 'prop_1']
+
+  if tabla == 'mapa_clientes':
+    list_df = ['pais','region','lat','lon','count']
+
+  if tabla in ['clientes_primerizos','usuarios_activos']:
+    list_df = ['pk_partition', 'short_term_deposit', 'loans', 'mortgage', 'funds',
+       'securities', 'long_term_deposit', 'em_account_pp', 'credit_card',
+       'payroll_account', 'emc_account', 'debit_card', 'em_account_p',
+       'em_acount', 'totales']
+
+  if tabla == 'informacion_productos':
+    list_df = ['producto', 'ciudad', 'ciudad_num', 'pais', 'pais_num', 'entry_channel',
+       'entry_channel_num']
+
+  if tabla == ['permanencias', 'antiguedades']:
+    list_df = ['short_term_deposit','loans','mortgage','funds','securities',
+      'long_term_deposit','em_account_pp','credit_card','payroll_account','emc_account','debit_card','em_account_p','em_acount']
+
+  sSQL = "SELECT * FROM "+tabla
+  #print(sSQL)
+  cursor.execute(sSQL)
+  df = pd.DataFrame(cursor.fetchall(), columns=list_df)
+    
+  return df
+
 
 
 def tipos_producto(df, products_dict):
@@ -294,3 +336,30 @@ def fig_churn_plot(tipo_productos, tipo_altas, tipo_bajas):
   return fig
 
 
+def calcular_rate (df): # index = pk_partition, 1 column with value
+  tabla = df.reset_index()
+  tabla.columns = ['pk_partition', 'value']
+  tabla = tabla[1:]
+
+  tabla['old'] = tabla['value'].shift(1)
+
+  tabla['rate'] = (tabla['value'] - tabla['old'])/tabla['old']*100
+  return tabla
+
+
+def limpiar_y_flecha(rate):
+  if str(rate) == 'nan':
+    rate = 'sin definir'
+  
+  if rate == 'sin definir':
+    flecha = '?'
+  elif rate < 0:
+    flecha = '▼'
+  elif rate == 0:
+    flecha = '꓿'
+  elif rate > 0:
+    flecha = '▲' # U+25B2
+  else:
+    flecha = '?'
+  
+  return rate, flecha
