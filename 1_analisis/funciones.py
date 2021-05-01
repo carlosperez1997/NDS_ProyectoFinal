@@ -1,15 +1,11 @@
 import numpy as np 
-import pandas as pd
-import matplotlib.pyplot as plt 
-import seaborn as sns
+import pandas as pd 
 
 import plotly.express as px
 import plotly.graph_objects as go
 
 # AWS RDS - MySQL Database
 import pymysql
-from sqlalchemy import create_engine
-import sqlalchemy
 
 pd.options.display.float_format = '{:,.2f}'.format
 

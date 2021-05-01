@@ -11,12 +11,8 @@ import pandas as pd
 import os
 
 # Visualizacion
-import matplotlib.pyplot as plt 
-import seaborn as sns
-import folium
 import plotly.express as px
 import plotly.graph_objects as go
-import base64
 
 from dash.dependencies import Input, Output, State
 
@@ -25,8 +21,6 @@ import funciones as f
 import product_functions as fp
 
 import pymysql
-from sqlalchemy import create_engine
-import sqlalchemy
 
 pd.options.display.float_format = '{:,.2f}'.format
 
